@@ -1,5 +1,5 @@
 # =============================================================================
-# Shipyard — .github/workflows/reusable/rollback.yml
+# Shipyard — .github/workflows/reusable-rollback.yml
 # Roll back to a specific version
 # Supports two triggers:
 #   workflow_dispatch: manual trigger from GitHub Actions UI
