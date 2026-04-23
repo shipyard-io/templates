@@ -1,0 +1,151 @@
+# =============================================================================
+# Shipyard — .github/workflows/reusable/rollback.yml
+# Roll back to a specific version
+# Supports two triggers:
+#   workflow_dispatch: manual trigger from GitHub Actions UI
+#   workflow_call: automatic trigger from another workflow
+# =============================================================================
+
+name: Rollback
+
+on:
+  # Manual trigger from GitHub Actions UI
+  workflow_dispatch:
+    inputs:
+      app-name:
+        description: "Application name to roll back"
+        required: true
+        type: string
+      image-tag:
+        description: "Target image tag (git SHA). Empty value falls back to previous version."
+        required: false
+        type: string
+        default: ""
+
+  # Automatic trigger from another workflow
+  workflow_call:
+    inputs:
+      app-name:
+        description: "Application name to roll back"
+        required: true
+        type: string
+      image-tag:
+        description: "Target image tag (git SHA). Empty value falls back to previous version."
+        required: false
+        type: string
+        default: ""
+
+    secrets:
+      SSH_PRIVATE_KEY:
+        required: true
+      SERVER_IP:
+        required: true
+      SERVER_USER:
+        required: false
+      TELEGRAM_BOT_TOKEN:
+        required: true
+      TELEGRAM_CHAT_ID:
+        required: true
+
+jobs:
+  rollback:
+    name: Rollback
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
+
+      # If image-tag is not provided, use .previous-tag
+      - name: Resolve target tag
+        id: resolve
+        env:
+          SERVER_USER: ${{ secrets.SERVER_USER || 'ubuntu' }}
+        run: |
+          if [ -n "${{ inputs.image-tag }}" ]; then
+            TARGET_TAG="${{ inputs.image-tag }}"
+            echo "Using requested rollback tag: ${TARGET_TAG}."
+          else
+            TARGET_TAG=$(ssh ${SERVER_USER}@${{ secrets.SERVER_IP }} \
+              "cat /apps/${{ inputs.app-name }}/.previous-tag 2>/dev/null || echo 'latest'")
+            echo "Using previous rollback tag: ${TARGET_TAG}."
+          fi
+          echo "tag=${TARGET_TAG}" >> $GITHUB_OUTPUT
+
+      - name: Execute rollback
+        env:
+          SERVER_USER: ${{ secrets.SERVER_USER || 'ubuntu' }}
+        run: |
+          ssh ${SERVER_USER}@${{ secrets.SERVER_IP }} bash << EOF
+            set -e
+            cd /apps/${{ inputs.app-name }}
+
+            CURRENT_TAG=\$(cat .current-tag 2>/dev/null || echo 'latest')
+            TARGET_TAG="${{ steps.resolve.outputs.tag }}"
+
+            echo "Current tag: \${CURRENT_TAG}"
+            echo "Target tag:  \${TARGET_TAG}"
+
+            # Save current tag as previous before rollback
+            echo "\$CURRENT_TAG" > .previous-tag
+
+            # Inject rollback tag and override IMAGE_TAG
+            echo "IMAGE_TAG=\$TARGET_TAG" >> .env
+            echo "\$TARGET_TAG" > .current-tag
+
+            docker compose pull
+            docker compose up -d --remove-orphans
+
+            echo "Rollback completed. Active tag: \${TARGET_TAG}."
+          EOF
+
+      # Health check after rollback
+      - name: Health check after rollback
+        env:
+          SERVER_USER: ${{ secrets.SERVER_USER || 'ubuntu' }}
+        run: |
+          APP_PORT=$(ssh ${SERVER_USER}@${{ secrets.SERVER_IP }} \
+            "grep '^APP_PORT=' /apps/${{ inputs.app-name }}/.env | tail -1 | cut -d= -f2")
+
+          echo "Running post-rollback health check on port ${APP_PORT}."
+
+          for i in $(seq 1 5); do
+            echo "Attempt $i/5..."
+            STATUS=$(ssh ${SERVER_USER}@${{ secrets.SERVER_IP }} \
+              "curl -s -o /dev/null -w '%{http_code}' http://localhost:${APP_PORT}/health || echo '000'")
+
+            if [ "$STATUS" = "200" ]; then
+              echo "Post-rollback health check passed."
+              exit 0
+            fi
+            sleep 10
+          done
+
+          echo "Post-rollback health check failed."
+          exit 1
+
+      # Send Telegram notification
+      - name: Notify rollback result
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            LABEL="Rolled back successfully"
+          else
+            LABEL="Rollback failed"
+          fi
+
+          MESSAGE="*${{ inputs.app-name }}* - ${LABEL}
+
+          *Rolled back to:* \`${{ steps.resolve.outputs.tag }}\`
+          *Triggered by:* ${{ github.actor }}
+          *Run:* https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          curl -sS -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "text=${MESSAGE}" \
+            --data-urlencode "parse_mode=Markdown" \
+            --data-urlencode "disable_web_page_preview=true"

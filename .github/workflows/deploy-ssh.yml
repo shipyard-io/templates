@@ -1,0 +1,166 @@
+name: Deploy via SSH
+
+on:
+  workflow_call:
+    inputs:
+      app-name:
+        description: "Application name used for /apps/<app-name> on the target server"
+        required: true
+        type: string
+      image-tag:
+        description: "Image tag to deploy (git SHA)"
+        required: true
+        type: string
+      health-check-path:
+        description: "Endpoint health check"
+        required: false
+        type: string
+        default: "/health"
+      health-check-retries:
+        description: "Number of health check retries"
+        required: false
+        type: number
+        default: 5
+
+    secrets:
+      SSH_PRIVATE_KEY:
+        required: true
+      SERVER_IP:
+        required: true
+      SERVER_USER:
+        required: false
+      ENV_FILE_CONTENT:
+        required: true
+        # ENV_FILE_CONTENT should include only:
+        #   APP_PORT=3000
+        #   APP_DOMAIN=project-a.yourdomain.com
+        #   DB_PASSWORD=xxx (if needed)
+        # The following variables are injected automatically and should not be set here:
+        #   IMAGE_TAG, GITHUB_REPOSITORY, APP_NAME
+
+jobs:
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
+
+      # Save current image tag for rollback
+      - name: Save current image tag for rollback
+        id: current
+        env:
+          SERVER_USER: ${{ secrets.SERVER_USER || 'ubuntu' }}
+        run: |
+          CURRENT_TAG=$(ssh ${SERVER_USER}@${{ secrets.SERVER_IP }} \
+            "cat /apps/${{ inputs.app-name }}/.current-tag 2>/dev/null || echo 'latest'")
+          echo "tag=${CURRENT_TAG}" >> $GITHUB_OUTPUT
+          echo "Current tag: ${CURRENT_TAG}"
+
+      # Deploy new image
+      - name: Deploy new image
+        env:
+          SERVER_USER: ${{ secrets.SERVER_USER || 'ubuntu' }}
+        run: |
+          ssh ${SERVER_USER}@${{ secrets.SERVER_IP }} bash << EOF
+            set -e
+            APP_DIR="/apps/${{ inputs.app-name }}"
+            mkdir -p \$APP_DIR
+            cd \$APP_DIR
+
+            # Write .env from secret content
+            cat > .env << 'ENVEOF'
+            ${{ secrets.ENV_FILE_CONTENT }}
+            ENVEOF
+
+            # Inject required runtime variables.
+            # Append order is intentional; the last value wins in docker compose parsing.
+            echo "IMAGE_TAG=${{ inputs.image-tag }}" >> .env
+            echo "GITHUB_REPOSITORY=${{ github.repository }}" >> .env
+            echo "APP_NAME=${{ inputs.app-name }}" >> .env
+
+            # Save current tag as previous for manual rollback
+            echo "${{ steps.current.outputs.tag }}" > .previous-tag
+
+            # Save new tag as current
+            echo "${{ inputs.image-tag }}" > .current-tag
+
+            # Authenticate to GHCR
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io \
+              -u ${{ github.actor }} --password-stdin 2>/dev/null
+
+            # Pull the image and restart services
+            docker compose pull
+            docker compose up -d --remove-orphans
+
+            echo "Container started with image tag: ${{ inputs.image-tag }}"
+          EOF
+
+      # Health check with retries
+      - name: Health check
+        id: healthcheck
+        env:
+          SERVER_USER: ${{ secrets.SERVER_USER || 'ubuntu' }}
+        run: |
+          # Read APP_PORT from .env. tail -1 ensures the final injected value is used.
+          APP_PORT=$(ssh ${SERVER_USER}@${{ secrets.SERVER_IP }} \
+            "grep '^APP_PORT=' /apps/${{ inputs.app-name }}/.env | tail -1 | cut -d= -f2")
+
+          echo "Running health check on port=${APP_PORT}, path=${{ inputs.health-check-path }}."
+
+          for i in $(seq 1 ${{ inputs.health-check-retries }}); do
+            echo "Attempt $i/${{ inputs.health-check-retries }}..."
+            STATUS=$(ssh ${SERVER_USER}@${{ secrets.SERVER_IP }} \
+              "curl -s -o /dev/null -w '%{http_code}' \
+              http://localhost:${APP_PORT}${{ inputs.health-check-path }} || echo '000'")
+
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed with HTTP ${STATUS}."
+              echo "passed=true" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+
+            echo "Health check returned HTTP ${STATUS}. Retrying in 10 seconds."
+            sleep 10
+          done
+
+          echo "Health check failed after ${{ inputs.health-check-retries }} attempts."
+          echo "passed=false" >> $GITHUB_OUTPUT
+          exit 1
+
+      # Roll back automatically if health check fails
+      - name: Rollback to previous version
+        if: failure() && steps.healthcheck.outputs.passed == 'false'
+        env:
+          SERVER_USER: ${{ secrets.SERVER_USER || 'ubuntu' }}
+        run: |
+          echo "Rolling back to previous tag: ${{ steps.current.outputs.tag }}."
+          ssh ${SERVER_USER}@${{ secrets.SERVER_IP }} bash << EOF
+            set -e
+            cd /apps/${{ inputs.app-name }}
+
+            # Save failed tag as previous
+            echo "${{ inputs.image-tag }}" > .previous-tag
+
+            # Restore previous IMAGE_TAG value
+            echo "IMAGE_TAG=${{ steps.current.outputs.tag }}" >> .env
+            echo "${{ steps.current.outputs.tag }}" > .current-tag
+
+            docker compose pull
+            docker compose up -d --remove-orphans
+
+            echo "Rollback completed. Current tag: ${{ steps.current.outputs.tag }}."
+          EOF
+
+      - name: Print deploy summary
+        if: success()
+        run: |
+          echo "Deployment summary"
+          echo "Application: ${{ inputs.app-name }}"
+          echo "Image tag:   ${{ inputs.image-tag }}"
+          echo "Server:      ${{ secrets.SERVER_IP }}"

@@ -1,0 +1,71 @@
+name: Notify Telegram
+
+on:
+  workflow_call:
+    inputs:
+      app-name:
+        description: "Application name"
+        required: true
+        type: string
+      status:
+        description: "Deployment status: success | failure | cancelled"
+        required: true
+        type: string
+      commit-message:
+        description: "Commit message"
+        required: false
+        type: string
+        default: "N/A"
+      actor:
+        description: "User who triggered the workflow"
+        required: false
+        type: string
+        default: "unknown"
+
+    secrets:
+      TELEGRAM_BOT_TOKEN:
+        required: true
+      TELEGRAM_CHAT_ID:
+        required: true
+
+jobs:
+  notify:
+    name: Send Telegram Notification
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set status message
+        id: status
+        run: |
+          case "${{ inputs.status }}" in
+            success)
+              echo "label=Deployed successfully" >> $GITHUB_OUTPUT
+              ;;
+            failure)
+              echo "label=Deploy failed" >> $GITHUB_OUTPUT
+              ;;
+            cancelled)
+              echo "label=Deploy cancelled" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "label=Deploy status unknown" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      - name: Send Telegram message
+        run: |
+          MESSAGE="*${{ inputs.app-name }}* - ${{ steps.status.outputs.label }}
+
+          *Commit:* \`${{ inputs.commit-message }}\`
+          *Triggered by:* ${{ inputs.actor }}
+          *Branch:* ${{ github.ref_name }}
+          *SHA:* \`${{ github.sha }}\`
+          *Run:* https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          curl -sS -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "text=${MESSAGE}" \
+            --data-urlencode "parse_mode=Markdown" \
+            --data-urlencode "disable_web_page_preview=true"
+
+          echo "Telegram notification sent."
