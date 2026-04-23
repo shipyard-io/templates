@@ -54,4 +54,4 @@ services:
 
 networks:
   proxy:
-    external: tr
+    external: true
