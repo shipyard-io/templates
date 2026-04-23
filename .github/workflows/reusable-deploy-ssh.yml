@@ -67,38 +67,38 @@ jobs:
         env:
           SERVER_USER: ${{ secrets.SERVER_USER || 'ubuntu' }}
         run: |
-          ssh ${SERVER_USER}@${{ secrets.SERVER_IP }} bash << EOF
-            set -e
-            APP_DIR="/apps/${{ inputs.app-name }}"
-            mkdir -p \$APP_DIR
-            cd \$APP_DIR
+          ssh ${SERVER_USER}@${{ secrets.SERVER_IP }} bash <<'EOF'
+          set -e
+          APP_DIR="/apps/${{ inputs.app-name }}"
+          mkdir -p "$APP_DIR"
+          cd "$APP_DIR"
 
-            # Write .env from secret content
-            cat > .env << 'ENVEOF'
-            ${{ secrets.ENV_FILE_CONTENT }}
-            ENVEOF
+          # Write .env from secret content
+          cat > .env <<'ENVEOF'
+          ${{ secrets.ENV_FILE_CONTENT }}
+          ENVEOF
 
-            # Inject required runtime variables.
-            # Append order is intentional; the last value wins in docker compose parsing.
-            echo "IMAGE_TAG=${{ inputs.image-tag }}" >> .env
-            echo "GITHUB_REPOSITORY=${{ github.repository }}" >> .env
-            echo "APP_NAME=${{ inputs.app-name }}" >> .env
+          # Inject required runtime variables.
+          # Append order is intentional; the last value wins in docker compose parsing.
+          echo "IMAGE_TAG=${{ inputs.image-tag }}" >> .env
+          echo "GITHUB_REPOSITORY=${{ github.repository }}" >> .env
+          echo "APP_NAME=${{ inputs.app-name }}" >> .env
 
-            # Save current tag as previous for manual rollback
-            echo "${{ steps.current.outputs.tag }}" > .previous-tag
+          # Save current tag as previous for manual rollback
+          echo "${{ steps.current.outputs.tag }}" > .previous-tag
 
-            # Save new tag as current
-            echo "${{ inputs.image-tag }}" > .current-tag
+          # Save new tag as current
+          echo "${{ inputs.image-tag }}" > .current-tag
 
-            # Authenticate to GHCR
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io \
-              -u ${{ github.actor }} --password-stdin 2>/dev/null
+          # Authenticate to GHCR
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io \
+            -u ${{ github.actor }} --password-stdin 2>/dev/null
 
-            # Pull the image and restart services
-            docker compose pull
-            docker compose up -d --remove-orphans
+          # Pull the image and restart services
+          docker compose pull
+          docker compose up -d --remove-orphans
 
-            echo "Container started with image tag: ${{ inputs.image-tag }}"
+          echo "Container started with image tag: ${{ inputs.image-tag }}"
           EOF
 
       # Health check with retries
