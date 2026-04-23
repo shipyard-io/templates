@@ -1,0 +1,33 @@
+---
+name: CI/CD
+
+'on':
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    uses: shipyard-io/shipyard/.github/workflows/reusable/build-docker.yml@main
+    with:
+      app-name: ${{ github.event.repository.name }}
+    secrets: inherit
+
+
+  deploy:
+    needs: build
+    uses: shipyard-io/shipyard/.github/workflows/reusable/deploy-ssh.yml@main
+    with:
+      app-name: ${{ github.event.repository.name }}
+      image-tag: ${{ needs.build.outputs.image-tag }}
+    secrets: inherit
+
+  notify:
+    needs: [build, deploy]
+    if: always()
+    uses: shipyard-io/shipyard/.github/workflows/reusable/notify.yml@main
+    with:
+      app-name: ${{ github.event.repository.name }}
+      status: ${{ needs.deploy.result }}
+      commit-message: ${{ github.event.head_commit.message }}
+      actor: ${{ github.actor }}
+    secrets: inherit
