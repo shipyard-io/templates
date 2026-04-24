@@ -2,21 +2,23 @@ name: CI/CD
 
 on:
   push:
-    branches: [develop]
+    branches: [develop, main]
 
 permissions:
   contents: read
   packages: write
 
-env:
-  APP_NAME: ${{ vars.APP_NAME || github.event.repository.name }}
-  HEALTH_CHECK_PATH: ${{ vars.HEALTH_CHECK_PATH || '/' }}
-
 jobs:
+  prepare:
+    uses: shipyard-io/templates/.github/workflows/reusable-prepare.yml@main
+    secrets:
+      ENV_FILE_CONTENT: ${{ secrets.ENV_FILE_CONTENT }}
+
   build:
+    needs: [prepare]
     uses: shipyard-io/templates/.github/workflows/reusable-build-docker.yml@main
     with:
-      app-name: ${{ env.APP_NAME }}
+      app-name: ${{ needs.prepare.outputs['app-name'] }}
     secrets: inherit
 
   setup-vps:
@@ -29,20 +31,21 @@ jobs:
     secrets: inherit
 
   deploy:
-    needs: [build, setup-traefik]
+    needs: [prepare, build, setup-traefik]
     uses: shipyard-io/templates/.github/workflows/reusable-deploy-ssh.yml@main
     with:
-      app-name: ${{ env.APP_NAME }}
+      app-name: ${{ needs.prepare.outputs['app-name'] }}
       image-tag: ${{ needs.build.outputs['image-tag'] }}
-      health-check-path: ${{ env.HEALTH_CHECK_PATH }}
+      health-check-path: ${{ needs.prepare.outputs['health-check-path'] }}
     secrets: inherit
 
   notify:
-    needs: [build, deploy]
+    needs: [prepare, build, deploy]
     if: always()
     uses: shipyard-io/templates/.github/workflows/reusable-notify.yml@main
     with:
-      app-name: ${{ env.APP_NAME }}
+      app-name: ${{ needs.prepare.outputs['app-name'] }}
+      app-domain: ${{ needs.prepare.outputs['app-domain'] }}
       status: ${{ needs.deploy.result }}
       commit-message: ${{ github.event.head_commit.message }}
       actor: ${{ github.actor }}

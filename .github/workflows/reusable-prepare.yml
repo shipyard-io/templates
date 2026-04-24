@@ -9,6 +9,9 @@ on:
       app-domain:
         description: "Application domain extracted from env content"
         value: ${{ jobs.prepare.outputs.app-domain }}
+      health-check-path:
+        description: "Health check path extracted from env content"
+        value: ${{ jobs.prepare.outputs.health-check-path }}
     secrets:
       ENV_FILE_CONTENT:
         required: true
@@ -20,6 +23,7 @@ jobs:
     outputs:
       app-name: ${{ steps.vars.outputs.app_name }}
       app-domain: ${{ steps.vars.outputs.app_domain }}
+      health-check-path: ${{ steps.vars.outputs.health_check_path }}
     steps:
       - name: Resolve variables from Secret content
         id: vars
@@ -35,6 +39,7 @@ jobs:
           # Extract values from the secret content string
           APP_NAME_RAW=$(echo "$CONTENT" | grep -E '^APP_NAME=' | head -n1 | cut -d= -f2- | tr -d '\r' | xargs || true)
           APP_DOMAIN=$(echo "$CONTENT" | grep -E '^APP_DOMAIN=' | head -n1 | cut -d= -f2- | tr -d '\r' | xargs || true)
+          HEALTH_CHECK_PATH_RAW=$(echo "$CONTENT" | grep -E '^HEALTH_CHECK_PATH=' | head -n1 | cut -d= -f2- | tr -d '\r' | xargs || true)
 
           if [ -z "$APP_NAME_RAW" ]; then
             echo "Error: APP_NAME is missing in ENV_FILE_CONTENT secret"
@@ -44,11 +49,13 @@ jobs:
           # Convert APP_NAME to lowercase for Docker compatibility
           APP_NAME="$(echo "$APP_NAME_RAW" | tr '[:upper:]' '[:lower:]')"
           
+          # Defaults
+          HEALTH_CHECK_PATH="${HEALTH_CHECK_PATH_RAW:-/}"
+
           echo "app_name=$APP_NAME" >> "$GITHUB_OUTPUT"
           echo "app_domain=$APP_DOMAIN" >> "$GITHUB_OUTPUT"
+          echo "health_check_path=$HEALTH_CHECK_PATH" >> "$GITHUB_OUTPUT"
           
-          # Mask outputs to be safe since they come from secrets
           echo "Resolved APP_NAME: $APP_NAME"
-          if [ -n "$APP_DOMAIN" ]; then
-            echo "Resolved APP_DOMAIN: $APP_DOMAIN"
-          fi
+          echo "Resolved APP_DOMAIN: $APP_DOMAIN"
+          echo "Resolved HEALTH_CHECK_PATH: $HEALTH_CHECK_PATH"
