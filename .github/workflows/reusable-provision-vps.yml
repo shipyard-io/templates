@@ -119,7 +119,8 @@ jobs:
         run: |
           set -euo pipefail
           ssh "${SERVER_USER}@${{ secrets.SERVER_IP }}" "rm -rf '${REMOTE_DIR}' && mkdir -p '${REMOTE_DIR}'"
-          tar czf - -C shipyard-templates scripts infrastructure/traefik | \
+          cd shipyard-templates
+          tar czf - scripts infrastructure/traefik | \
             ssh "${SERVER_USER}@${{ secrets.SERVER_IP }}" "tar xzf - -C '${REMOTE_DIR}'"
 
       - name: Write Traefik secrets as files

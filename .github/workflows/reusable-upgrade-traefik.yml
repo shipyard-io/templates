@@ -81,7 +81,8 @@ jobs:
         run: |
           set -euo pipefail
           ssh "${SERVER_USER}@${{ secrets.SERVER_IP }}" "rm -rf '${REMOTE_DIR}' && mkdir -p '${REMOTE_DIR}'"
-          tar czf - -C shipyard-templates scripts/setup-traefik.sh infrastructure/traefik | \
+          cd shipyard-templates
+          tar czf - scripts/setup-traefik.sh infrastructure/traefik | \
             ssh "${SERVER_USER}@${{ secrets.SERVER_IP }}" "tar xzf - -C '${REMOTE_DIR}'"
 
       - name: Sync Traefik secrets
