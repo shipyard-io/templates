@@ -65,7 +65,9 @@ jobs:
         env:
           SERVER_USER: ${{ secrets.SERVER_USER || 'ubuntu' }}
         run: |
-          ssh ${SERVER_USER}@${{ secrets.SERVER_IP }} "curl -sSL https://raw.githubusercontent.com/shipyard-io/templates/main/scripts/rollback.sh | bash -s -- '${{ inputs.app-name }}' '${{ inputs.image-tag }}'"
+          ssh ${SERVER_USER}@${{ secrets.SERVER_IP }} \
+            "echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin 2>/dev/null; \
+             curl -sSL https://raw.githubusercontent.com/shipyard-io/templates/main/scripts/rollback.sh | bash -s -- '${{ inputs.app-name }}' '${{ inputs.image-tag }}'"
           # For notification, we use the fallback tag logic
           TARGET_TAG="${{ inputs.image-tag }}"
           if [ -z "$TARGET_TAG" ]; then

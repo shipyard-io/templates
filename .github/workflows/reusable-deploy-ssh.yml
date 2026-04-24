@@ -96,7 +96,8 @@ jobs:
 
           # Call the centralized deploy script on the VPS
           ssh ${SERVER_USER}@${{ secrets.SERVER_IP }} \
-            "curl -sSL https://raw.githubusercontent.com/shipyard-io/templates/main/scripts/deploy.sh | bash -s -- '${{ inputs.app-name }}' '${{ inputs.image-tag }}' '${{ inputs.health-check-path }}' '${{ inputs.health-check-retries }}'"
+            "echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin 2>/dev/null; \
+             curl -sSL https://raw.githubusercontent.com/shipyard-io/templates/main/scripts/deploy.sh | bash -s -- '${{ inputs.app-name }}' '${{ inputs.image-tag }}' '${{ inputs.health-check-path }}' '${{ inputs.health-check-retries }}'"
 
       - name: Print deploy summary
         if: success()
