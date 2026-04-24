@@ -54,42 +54,12 @@ jobs:
 
       - name: Send Telegram message
         run: |
-          STATUS="${{ inputs.status }}"
-          STATUS_LABEL="${{ steps.status.outputs.label }}"
-
-          ICON="🚀"
-          if [[ "$STATUS" == "failure" ]]; then ICON="❌"; fi
-          if [[ "$STATUS" == "success" ]]; then ICON="✅"; fi
-          if [[ "$STATUS" == "cancelled" ]]; then ICON="⚠️"; fi
-
-          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-          SHORT_COMMIT=$(echo "${{ inputs.commit-message }}" | head -n 1)
-
-          MESSAGE="
-          ━━━━━━━━━━━━━━━━━━━━━━━━
-          ${ICON} *${{ inputs.app-name }}*
-          ━━━━━━━━━━━━━━━━━━━━━━━━
-
-          📌 *Status:* \`${STATUS_LABEL}\`
-          🌿 *Branch:* \`${{ github.ref_name }}\`
-          👤 *Actor:* \`${{ inputs.actor }}\`
-
-          💬 *Commit:*
-          \`${SHORT_COMMIT}\`
-
-          🔖 *SHA:* \`${SHORT_SHA}\`
-
-          ━━━━━━━━━━━━━━━━━━━━━━━━
-          🔎 [View Workflow Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
-          "
-
-          # Remove leading whitespaces for clean Markdown formatting
-          MESSAGE=$(echo "$MESSAGE" | sed 's/^[ \t]*//')
-
-          curl -sS -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
-            --data-urlencode "text=${MESSAGE}" \
-            --data-urlencode "parse_mode=Markdown" \
-            --data-urlencode "disable_web_page_preview=true"
-
-          echo "Telegram card sent."
+          curl -sSL https://raw.githubusercontent.com/shipyard-io/templates/main/scripts/notify.sh | bash -s -- \
+            "${{ inputs.app-name }}" \
+            "${{ inputs.status }}" \
+            "${{ inputs.commit-message }}" \
+            "${{ inputs.actor }}" \
+            "${{ github.sha }}" \
+            "${{ github.ref_name }}" \
+            "${{ github.repository }}" \
+            "${{ github.run_id }}"

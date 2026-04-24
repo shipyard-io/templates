@@ -1,0 +1,33 @@
+version: "2.1"
+
+jobs:
+  notify:
+    description: "Send Telegram Notification"
+    docker:
+      - image: cimg/base:current
+    parameters:
+      app-name:
+        type: string
+        description: "Application name"
+      status:
+        type: string
+        description: "Deployment status (success, failure, etc.)"
+      commit-message:
+        type: string
+        default: ""
+      actor:
+        type: string
+        default: ""
+    steps:
+      - run:
+          name: Telegram notify
+          command: |
+            curl -sSL https://raw.githubusercontent.com/shipyard-io/templates/main/scripts/notify.sh | bash -s -- \
+              "<< parameters.app-name >>" \
+              "<< parameters.status >>" \
+              "<< parameters.commit-message >>" \
+              "<< parameters.actor >>" \
+              "$CIRCLE_SHA1" \
+              "$CIRCLE_BRANCH" \
+              "$CIRCLE_PROJECT_REPONAME" \
+              "$CIRCLE_BUILD_NUM"
