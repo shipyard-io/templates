@@ -6,12 +6,10 @@ on:
       server-user:
         description: SSH user on the VPS
         required: false
-        default: ubuntu
         type: string
       deploy-user:
         description: DEPLOY_USER for setup-vps.sh
         required: false
-        default: ubuntu
         type: string
       remote-dir:
         description: Temporary bootstrap directory on VPS
@@ -37,11 +35,9 @@ on:
     inputs:
       server-user:
         required: false
-        default: ubuntu
         type: string
       deploy-user:
         required: false
-        default: ubuntu
         type: string
       remote-dir:
         required: false

@@ -6,7 +6,6 @@ on:
       server-user:
         description: SSH user on the VPS
         required: false
-        default: ubuntu
         type: string
       remote-dir:
         description: Temporary directory on VPS
@@ -17,7 +16,6 @@ on:
     inputs:
       server-user:
         required: false
-        default: ubuntu
         type: string
       remote-dir:
         required: false
