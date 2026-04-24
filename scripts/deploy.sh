@@ -1,12 +1,13 @@
 #!/bin/bash
 set -e
 
-# Usage: bash scripts/deploy.sh <app-name> <image-tag> [health-check-path] [health-check-retries]
+# Usage: bash scripts/deploy.sh <app-name> <image-tag> [health-check-path] [health-check-retries] [registry-url]
 
 APP_NAME=$1
 IMAGE_TAG=$2
 HEALTH_CHECK_PATH=${3:-/}
 HEALTH_CHECK_RETRIES=${4:-5}
+REGISTRY_URL=$(echo "${5:-ghcr.io/shipyard-io}" | tr '[:upper:]' '[:lower:]')
 
 APP_DIR="/apps/$APP_NAME"
 
@@ -32,6 +33,9 @@ echo "IMAGE_TAG=$IMAGE_TAG" >> .env
 
 sed -i '/^APP_NAME=/d' .env 2>/dev/null || true
 echo "APP_NAME=$APP_NAME" >> .env
+
+sed -i '/^DOCKER_IMAGE=/d' .env 2>/dev/null || true
+echo "DOCKER_IMAGE=${REGISTRY_URL}/${APP_NAME}" >> .env
 
 echo "Pulling image..."
 docker compose pull

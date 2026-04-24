@@ -52,11 +52,14 @@ jobs:
             # Write .env file
             ssh ${SERVER_USER}@${SERVER_IP} "cat > /apps/<< parameters.app-name >>/.env" \<<EOF
             $ENV_FILE_CONTENT
-
-            GITHUB_REPOSITORY=$(echo "${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}" | tr '[:upper:]' '[:lower:]')
             EOF
             
             # Call the centralized deploy script on the VPS
             ssh ${SERVER_USER}@${SERVER_IP} \
               "echo '${GITHUB_TOKEN}' | docker login ghcr.io -u '${CIRCLE_PROJECT_USERNAME}' --password-stdin 2>/dev/null; \
-               curl -sSL https://raw.githubusercontent.com/shipyard-io/templates/main/scripts/deploy.sh | bash -s -- '<< parameters.app-name >>' '<< parameters.image-tag >>' '<< parameters.health-check-path >>' '<< parameters.health-check-retries >>'"
+               curl -sSL https://raw.githubusercontent.com/shipyard-io/templates/main/scripts/deploy.sh | bash -s -- \
+                 '<< parameters.app-name >>' \
+                 '<< parameters.image-tag >>' \
+                 '<< parameters.health-check-path >>' \
+                 '<< parameters.health-check-retries >>' \
+                 'ghcr.io/${CIRCLE_PROJECT_USERNAME}'"

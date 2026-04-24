@@ -90,14 +90,17 @@ jobs:
           # Write .env file
           ssh ${SERVER_USER}@${{ secrets.SERVER_IP }} "cat > /apps/${{ inputs.app-name }}/.env" <<EOF
           ${{ secrets.ENV_FILE_CONTENT }}
-
-          GITHUB_REPOSITORY=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           EOF
 
           # Call the centralized deploy script on the VPS
           ssh ${SERVER_USER}@${{ secrets.SERVER_IP }} \
             "echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin 2>/dev/null; \
-             curl -sSL https://raw.githubusercontent.com/shipyard-io/templates/main/scripts/deploy.sh | bash -s -- '${{ inputs.app-name }}' '${{ inputs.image-tag }}' '${{ inputs.health-check-path }}' '${{ inputs.health-check-retries }}'"
+             curl -sSL https://raw.githubusercontent.com/shipyard-io/templates/main/scripts/deploy.sh | bash -s -- \
+               '${{ inputs.app-name }}' \
+               '${{ inputs.image-tag }}' \
+               '${{ inputs.health-check-path }}' \
+               '${{ inputs.health-check-retries }}' \
+               'ghcr.io/${{ github.repository_owner }}'"
 
       - name: Print deploy summary
         if: success()

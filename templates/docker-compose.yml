@@ -1,6 +1,6 @@
 services:
   app:
-    image: ghcr.io/${GITHUB_REPOSITORY}:${IMAGE_TAG:-latest}
+    image: ${DOCKER_IMAGE}:${IMAGE_TAG:-latest}
     container_name: ${APP_NAME}
     env_file:
       - .env
