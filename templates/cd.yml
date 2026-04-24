@@ -1,0 +1,49 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [develop]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  APP_NAME: ${{ vars.APP_NAME || github.event.repository.name }}
+  HEALTH_CHECK_PATH: ${{ vars.HEALTH_CHECK_PATH || '/' }}
+
+jobs:
+  build:
+    uses: shipyard-io/templates/.github/workflows/reusable-build-docker.yml@main
+    with:
+      app-name: ${{ env.APP_NAME }}
+    secrets: inherit
+
+  setup-vps:
+    uses: shipyard-io/templates/.github/workflows/reusable-provision-vps.yml@main
+    secrets: inherit
+
+  setup-traefik:
+    needs: [setup-vps]
+    uses: shipyard-io/templates/.github/workflows/reusable-upgrade-traefik.yml@main
+    secrets: inherit
+
+  deploy:
+    needs: [build, setup-traefik]
+    uses: shipyard-io/templates/.github/workflows/reusable-deploy-ssh.yml@main
+    with:
+      app-name: ${{ env.APP_NAME }}
+      image-tag: ${{ needs.build.outputs['image-tag'] }}
+      health-check-path: ${{ env.HEALTH_CHECK_PATH }}
+    secrets: inherit
+
+  notify:
+    needs: [build, deploy]
+    if: always()
+    uses: shipyard-io/templates/.github/workflows/reusable-notify.yml@main
+    with:
+      app-name: ${{ env.APP_NAME }}
+      status: ${{ needs.deploy.result }}
+      commit-message: ${{ github.event.head_commit.message }}
+      actor: ${{ github.actor }}
+    secrets: inherit

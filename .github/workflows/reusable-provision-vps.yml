@@ -6,12 +6,10 @@ on:
       server-user:
         description: SSH user on the VPS
         required: false
-        default: ubuntu
         type: string
       deploy-user:
         description: DEPLOY_USER for setup-vps.sh
         required: false
-        default: ubuntu
         type: string
       remote-dir:
         description: Temporary bootstrap directory on VPS
@@ -33,19 +31,35 @@ on:
         required: false
         default: "22"
         type: string
+      traefik-http-port:
+        description: HTTP port for Traefik
+        required: false
+        default: '80'
+        type: string
+      traefik-https-port:
+        description: HTTPS port for Traefik
+        required: false
+        default: '443'
+        type: string
   workflow_call:
     inputs:
       server-user:
         required: false
-        default: ubuntu
         type: string
       deploy-user:
         required: false
-        default: ubuntu
         type: string
       remote-dir:
         required: false
         default: /tmp/shipyard-bootstrap
+        type: string
+      traefik-http-port:
+        required: false
+        default: '80'
+        type: string
+      traefik-https-port:
+        required: false
+        default: '443'
         type: string
       swap-size:
         required: false
@@ -87,9 +101,14 @@ jobs:
       SWAP_SIZE: ${{ inputs.swap-size || '2G' }}
       APPS_DIR: ${{ inputs.apps-dir || '/apps' }}
       SSH_PORT: ${{ inputs.ssh-port || '22' }}
+      TRAEFIK_HTTP_PORT: ${{ inputs.traefik-http-port || '80' }}
+      TRAEFIK_HTTPS_PORT: ${{ inputs.traefik-https-port || '443' }}
     steps:
-      - name: Checkout repository
+      - name: Checkout templates repository
         uses: actions/checkout@v4
+        with:
+          repository: shipyard-io/templates
+          path: shipyard-templates
 
       - name: Validate required secrets
         env:
@@ -115,11 +134,17 @@ jobs:
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H "${{ secrets.SERVER_IP }}" >> ~/.ssh/known_hosts
+          cat >> ~/.ssh/config <<EOF
+          Host *
+            ServerAliveInterval 60
+            ServerAliveCountMax 10
+          EOF
 
       - name: Upload bootstrap files
         run: |
           set -euo pipefail
           ssh "${SERVER_USER}@${{ secrets.SERVER_IP }}" "rm -rf '${REMOTE_DIR}' && mkdir -p '${REMOTE_DIR}'"
+          cd shipyard-templates
           tar czf - scripts infrastructure/traefik | \
             ssh "${SERVER_USER}@${{ secrets.SERVER_IP }}" "tar xzf - -C '${REMOTE_DIR}'"
 
@@ -132,9 +157,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/shipyard-certs
-          printf '%s\n' "$CLOUDFLARE_ORIGIN_CERT" > /tmp/shipyard-certs/origin.pem
-          printf '%s\n' "$CLOUDFLARE_ORIGIN_KEY" > /tmp/shipyard-certs/origin.key
-          printf 'DOMAIN=%s\nTRAEFIK_DASHBOARD_AUTH=%s\n' "$DOMAIN" "$TRAEFIK_DASHBOARD_AUTH" > /tmp/shipyard-certs/.env
+          printf '%b\n' "$CLOUDFLARE_ORIGIN_CERT" > /tmp/shipyard-certs/origin.pem
+          printf '%b\n' "$CLOUDFLARE_ORIGIN_KEY" > /tmp/shipyard-certs/origin.key
+          ESCAPED_AUTH=$(echo -n "$TRAEFIK_DASHBOARD_AUTH" | sed -e 's/\\//g')
+          printf "DOMAIN='%s'\nTRAEFIK_DASHBOARD_AUTH='%s'\nTRAEFIK_HTTP_PORT='%s'\nTRAEFIK_HTTPS_PORT='%s'\n" \
+            "$DOMAIN" "$ESCAPED_AUTH" "$TRAEFIK_HTTP_PORT" "$TRAEFIK_HTTPS_PORT" > /tmp/shipyard-certs/.env
 
           ssh "${SERVER_USER}@${{ secrets.SERVER_IP }}" "mkdir -p '${REMOTE_DIR}/infrastructure/traefik/certs'"
           scp /tmp/shipyard-certs/origin.pem "${SERVER_USER}@${{ secrets.SERVER_IP }}:${REMOTE_DIR}/infrastructure/traefik/certs/origin.pem"

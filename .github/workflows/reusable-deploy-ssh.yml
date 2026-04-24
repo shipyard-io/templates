@@ -36,13 +36,6 @@ on:
         required: false
       ENV_FILE_CONTENT:
         required: true
-        # ENV_FILE_CONTENT should include only:
-        #   APP_PORT=3000
-        #   APP_DOMAIN=project-a.yourdomain.com
-        #   DB_PASSWORD=xxx (if needed)
-        # The following variables are injected automatically and should not be set here:
-        #   IMAGE_TAG, GITHUB_REPOSITORY, APP_NAME
-
 jobs:
   deploy:
     name: Deploy to VPS
@@ -58,6 +51,11 @@ jobs:
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
+          cat >> ~/.ssh/config <<EOF
+          Host *
+            ServerAliveInterval 60
+            ServerAliveCountMax 10
+          EOF
 
       - name: Upload Docker Compose file
         env:

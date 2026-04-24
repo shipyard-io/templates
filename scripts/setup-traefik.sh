@@ -14,7 +14,10 @@ section() { echo -e "\n${BLUE}===> $1${NC}"; }
 
 section "Check dependencies"
 command -v docker &>/dev/null || error "Docker is not installed."
-docker network inspect proxy &>/dev/null || error "Docker network 'proxy' not found."
+docker network inspect proxy &>/dev/null || {
+  log "Docker network 'proxy' not found. Creating it..."
+  docker network create proxy
+}
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
@@ -52,10 +55,10 @@ fi
 [ -f docker-compose.yml ] || error "docker-compose.yml not found."
 
 if docker compose ps --services --filter status=running 2>/dev/null | grep -qx "traefik"; then
-  docker compose down >/dev/null 2>&1
+  docker compose down
 fi
 
-docker compose up -d >/dev/null 2>&1
+docker compose up -d
 log "Traefik started."
 
 section "Verify"

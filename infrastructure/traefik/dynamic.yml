@@ -1,6 +1,9 @@
-# Traefik dynamic configuration.
-
 tls:
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /certs/origin.pem
+        keyFile: /certs/origin.key
   options:
     default:
       minVersion: VersionTLS12
