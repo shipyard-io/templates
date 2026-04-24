@@ -1,0 +1,59 @@
+version: "2.1"
+
+jobs:
+  deploy-ssh:
+    description: "Deploy via SSH"
+    docker:
+      - image: cimg/base:current
+    parameters:
+      app-name:
+        type: string
+        description: "Application name used for /apps/<app-name> on the target server"
+      image-tag:
+        type: string
+        description: "Image tag to deploy (git SHA)"
+      compose-file:
+        type: string
+        default: "docker-compose.yml"
+      health-check-path:
+        type: string
+        default: "/health"
+      health-check-retries:
+        type: integer
+        default: 5
+    steps:
+      - checkout
+      - run:
+          name: Setup SSH key
+          command: |
+            mkdir -p ~/.ssh
+            echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+            chmod 600 ~/.ssh/id_rsa
+            ssh-keyscan -H "$SERVER_IP" >> ~/.ssh/known_hosts
+            cat >> ~/.ssh/config \<<EOF
+            Host *
+              ServerAliveInterval 60
+              ServerAliveCountMax 10
+            EOF
+      - run:
+          name: Upload Docker Compose file
+          command: |
+            if [ ! -f "<< parameters.compose-file >>" ]; then
+              echo "Compose file not found: << parameters.compose-file >>"
+              exit 1
+            fi
+            SERVER_USER="${SERVER_USER:-ubuntu}"
+            ssh ${SERVER_USER}@${SERVER_IP} "mkdir -p /apps/<< parameters.app-name >>"
+            scp "<< parameters.compose-file >>" "${SERVER_USER}@${SERVER_IP}:/apps/<< parameters.app-name >>/docker-compose.yml"
+      - run:
+          name: Deploy new image
+          command: |
+            SERVER_USER="${SERVER_USER:-ubuntu}"
+            # Write .env file
+            ssh ${SERVER_USER}@${SERVER_IP} "cat > /apps/<< parameters.app-name >>/.env" \<<EOF
+            $ENV_FILE_CONTENT
+            EOF
+            
+            # Call the centralized deploy script on the VPS
+            ssh ${SERVER_USER}@${SERVER_IP} \
+              "bash ~/shipyard/scripts/deploy.sh '<< parameters.app-name >>' '<< parameters.image-tag >>' '<< parameters.health-check-path >>' '<< parameters.health-check-retries >>'"

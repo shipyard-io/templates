@@ -1,0 +1,27 @@
+version: "2.1"
+
+jobs:
+  provision-vps:
+    description: "Provision VPS"
+    docker:
+      - image: cimg/base:current
+    steps:
+      - checkout
+      - run:
+          name: Setup SSH key
+          command: |
+            mkdir -p ~/.ssh
+            echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+            chmod 600 ~/.ssh/id_rsa
+            ssh-keyscan -H "$SERVER_IP" >> ~/.ssh/known_hosts
+            cat >> ~/.ssh/config \<<EOF
+            Host *
+              ServerAliveInterval 60
+              ServerAliveCountMax 10
+            EOF
+      - run:
+          name: Provision VPS
+          command: |
+            SERVER_USER="${SERVER_USER:-ubuntu}"
+            scp -r scripts ${SERVER_USER}@${SERVER_IP}:~/shipyard/
+            ssh ${SERVER_USER}@${SERVER_IP} "bash ~/shipyard/scripts/setup-vps.sh"
