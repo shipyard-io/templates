@@ -12,6 +12,9 @@ on:
       health-check-path:
         description: "Health check path extracted from env content"
         value: ${{ jobs.prepare.outputs.health-check-path }}
+      init-infra:
+        description: "Whether to initialize infrastructure (true/false)"
+        value: ${{ jobs.prepare.outputs.init-infra }}
     secrets:
       ENV_FILE_CONTENT:
         required: true
@@ -24,6 +27,7 @@ jobs:
       app-name: ${{ steps.vars.outputs.app_name }}
       app-domain: ${{ steps.vars.outputs.app_domain }}
       health-check-path: ${{ steps.vars.outputs.health_check_path }}
+      init-infra: ${{ steps.vars.outputs.init_infra }}
     steps:
       - name: Resolve variables from Secret content
         id: vars
@@ -40,6 +44,7 @@ jobs:
           APP_NAME_RAW=$(echo "$CONTENT" | grep -E '^APP_NAME=' | head -n1 | cut -d= -f2- | tr -d '\r' | xargs || true)
           APP_DOMAIN=$(echo "$CONTENT" | grep -E '^APP_DOMAIN=' | head -n1 | cut -d= -f2- | tr -d '\r' | xargs || true)
           HEALTH_CHECK_PATH_RAW=$(echo "$CONTENT" | grep -E '^HEALTH_CHECK_PATH=' | head -n1 | cut -d= -f2- | tr -d '\r' | xargs || true)
+          INIT_INFRA_RAW=$(echo "$CONTENT" | grep -E '^INIT_INFRA=' | head -n1 | cut -d= -f2- | tr -d '\r' | xargs || true)
 
           if [ -z "$APP_NAME_RAW" ]; then
             echo "Error: APP_NAME is missing in ENV_FILE_CONTENT secret"
@@ -51,11 +56,14 @@ jobs:
           
           # Defaults
           HEALTH_CHECK_PATH="${HEALTH_CHECK_PATH_RAW:-/}"
+          INIT_INFRA="$(echo "${INIT_INFRA_RAW:-false}" | tr '[:upper:]' '[:lower:]')"
 
           echo "app_name=$APP_NAME" >> "$GITHUB_OUTPUT"
           echo "app_domain=$APP_DOMAIN" >> "$GITHUB_OUTPUT"
           echo "health_check_path=$HEALTH_CHECK_PATH" >> "$GITHUB_OUTPUT"
+          echo "init_infra=$INIT_INFRA" >> "$GITHUB_OUTPUT"
           
           echo "Resolved APP_NAME: $APP_NAME"
           echo "Resolved APP_DOMAIN: $APP_DOMAIN"
           echo "Resolved HEALTH_CHECK_PATH: $HEALTH_CHECK_PATH"
+          echo "Resolved INIT_INFRA: $INIT_INFRA"
