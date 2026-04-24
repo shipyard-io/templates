@@ -11,6 +11,11 @@ on:
         description: "Image tag to deploy (git SHA)"
         required: true
         type: string
+      compose-file:
+        description: "Path to docker compose file in the caller repository"
+        required: false
+        type: string
+        default: "docker-compose.yml"
       health-check-path:
         description: "Endpoint health check"
         required: false
@@ -44,12 +49,29 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
+
+      - name: Upload Docker Compose file
+        env:
+          SERVER_USER: ${{ secrets.SERVER_USER || 'ubuntu' }}
+        run: |
+          if [ ! -f "${{ inputs.compose-file }}" ]; then
+            echo "Compose file not found in repository: ${{ inputs.compose-file }}"
+            exit 1
+          fi
+
+          ssh ${SERVER_USER}@${{ secrets.SERVER_IP }} \
+            "mkdir -p /apps/${{ inputs.app-name }}"
+          scp "${{ inputs.compose-file }}" \
+            "${SERVER_USER}@${{ secrets.SERVER_IP }}:/apps/${{ inputs.app-name }}/docker-compose.yml"
 
       # Save current image tag for rollback
       - name: Save current image tag for rollback
@@ -67,38 +89,41 @@ jobs:
         env:
           SERVER_USER: ${{ secrets.SERVER_USER || 'ubuntu' }}
         run: |
-          ssh ${SERVER_USER}@${{ secrets.SERVER_IP }} bash << EOF
-            set -e
-            APP_DIR="/apps/${{ inputs.app-name }}"
-            mkdir -p \$APP_DIR
-            cd \$APP_DIR
+          ssh ${SERVER_USER}@${{ secrets.SERVER_IP }} bash <<'EOF'
+          set -e
+          APP_DIR="/apps/${{ inputs.app-name }}"
+          mkdir -p "$APP_DIR"
+          cd "$APP_DIR"
 
-            # Write .env from secret content
-            cat > .env << 'ENVEOF'
-            ${{ secrets.ENV_FILE_CONTENT }}
-            ENVEOF
+          # Write .env from secret content
+          printf '%s\n' "${{ secrets.ENV_FILE_CONTENT }}" > .env
 
-            # Inject required runtime variables.
-            # Append order is intentional; the last value wins in docker compose parsing.
-            echo "IMAGE_TAG=${{ inputs.image-tag }}" >> .env
-            echo "GITHUB_REPOSITORY=${{ github.repository }}" >> .env
-            echo "APP_NAME=${{ inputs.app-name }}" >> .env
+          # Inject required runtime variables.
+          # Append order is intentional; the last value wins in docker compose parsing.
+          echo "IMAGE_TAG=${{ inputs.image-tag }}" >> .env
+          echo "GITHUB_REPOSITORY=${{ github.repository }}" >> .env
+          echo "APP_NAME=${{ inputs.app-name }}" >> .env
 
-            # Save current tag as previous for manual rollback
-            echo "${{ steps.current.outputs.tag }}" > .previous-tag
+          # Save current tag as previous for manual rollback
+          echo "${{ steps.current.outputs.tag }}" > .previous-tag
 
-            # Save new tag as current
-            echo "${{ inputs.image-tag }}" > .current-tag
+          # Save new tag as current
+          echo "${{ inputs.image-tag }}" > .current-tag
 
-            # Authenticate to GHCR
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io \
-              -u ${{ github.actor }} --password-stdin 2>/dev/null
+          # Authenticate to GHCR
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io \
+            -u ${{ github.actor }} --password-stdin 2>/dev/null
 
-            # Pull the image and restart services
-            docker compose pull
-            docker compose up -d --remove-orphans
+          if [ ! -f docker-compose.yml ]; then
+            echo "docker-compose.yml not found in ${APP_DIR}"
+            exit 1
+          fi
 
-            echo "Container started with image tag: ${{ inputs.image-tag }}"
+          # Pull the image and restart services
+          docker compose pull
+          docker compose up -d --remove-orphans
+
+          echo "Container started with image tag: ${{ inputs.image-tag }}"
           EOF
 
       # Health check with retries
@@ -150,6 +175,11 @@ jobs:
             # Restore previous IMAGE_TAG value
             echo "IMAGE_TAG=${{ steps.current.outputs.tag }}" >> .env
             echo "${{ steps.current.outputs.tag }}" > .current-tag
+
+            if [ ! -f docker-compose.yml ]; then
+              echo "docker-compose.yml not found in /apps/${{ inputs.app-name }}"
+              exit 1
+            fi
 
             docker compose pull
             docker compose up -d --remove-orphans
