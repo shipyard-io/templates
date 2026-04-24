@@ -1,5 +1,3 @@
-# Traefik reverse proxy stack.
-
 services:
   traefik:
     image: traefik:v3.0
@@ -23,12 +21,17 @@ services:
 
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.dashboard.rule=Host(`traefik.${DOMAIN:?DOMAIN is required}`)"
+      - "traefik.http.routers.dashboard.rule=Host(`traefik.${DOMAIN:?DOMAIN is required}`) && (PathPrefix(`/dashboard`) || PathPrefix(`/api`))"
+
       - "traefik.http.routers.dashboard.entrypoints=websecure"
       - "traefik.http.routers.dashboard.tls=true"
       - "traefik.http.routers.dashboard.service=api@internal"
-      - "traefik.http.routers.dashboard.middlewares=auth"
+      - "traefik.http.routers.dashboard.middlewares=auth,redirect-dashboard"
+
       - "traefik.http.middlewares.auth.basicauth.users=${TRAEFIK_DASHBOARD_AUTH:?TRAEFIK_DASHBOARD_AUTH is required}"
+
+      - "traefik.http.middlewares.redirect-dashboard.redirectregex.regex=^https?://([^/]+)/?$"
+      - "traefik.http.middlewares.redirect-dashboard.redirectregex.replacement=https://$${1}/dashboard/"
 
     logging:
       driver: "json-file"
