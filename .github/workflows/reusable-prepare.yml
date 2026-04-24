@@ -4,11 +4,14 @@ on:
   workflow_call:
     outputs:
       app-name:
-        description: "Application name extracted from .env and lowercased"
+        description: "Application name extracted from env content and lowercased"
         value: ${{ jobs.prepare.outputs.app-name }}
       app-domain:
-        description: "Application domain extracted from .env"
+        description: "Application domain extracted from env content"
         value: ${{ jobs.prepare.outputs.app-domain }}
+    secrets:
+      ENV_FILE_CONTENT:
+        required: true
 
 jobs:
   prepare:
@@ -18,23 +21,23 @@ jobs:
       app-name: ${{ steps.vars.outputs.app_name }}
       app-domain: ${{ steps.vars.outputs.app_domain }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Resolve variables from .env
+      - name: Resolve variables from Secret content
         id: vars
         shell: bash
         run: |
-          if [ ! -f .env ]; then
-            echo "Error: .env file not found"
+          CONTENT="${{ secrets.ENV_FILE_CONTENT }}"
+          
+          if [ -z "$CONTENT" ]; then
+            echo "Error: ENV_FILE_CONTENT secret is empty"
             exit 1
           fi
-          # Extract values, remove carriage returns, and trim whitespace
-          APP_NAME_RAW="$(grep -E '^APP_NAME=' .env | head -n1 | cut -d= -f2- | tr -d '\r' | xargs)"
-          APP_DOMAIN="$(grep -E '^APP_DOMAIN=' .env | head -n1 | cut -d= -f2- | tr -d '\r' | xargs)"
+
+          # Extract values from the secret content string
+          APP_NAME_RAW=$(echo "$CONTENT" | grep -E '^APP_NAME=' | head -n1 | cut -d= -f2- | tr -d '\r' | xargs || true)
+          APP_DOMAIN=$(echo "$CONTENT" | grep -E '^APP_DOMAIN=' | head -n1 | cut -d= -f2- | tr -d '\r' | xargs || true)
 
           if [ -z "$APP_NAME_RAW" ]; then
-            echo "Error: APP_NAME is missing in .env"
+            echo "Error: APP_NAME is missing in ENV_FILE_CONTENT secret"
             exit 1
           fi
           
@@ -43,5 +46,9 @@ jobs:
           
           echo "app_name=$APP_NAME" >> "$GITHUB_OUTPUT"
           echo "app_domain=$APP_DOMAIN" >> "$GITHUB_OUTPUT"
+          
+          # Mask outputs to be safe since they come from secrets
           echo "Resolved APP_NAME: $APP_NAME"
-          echo "Resolved APP_DOMAIN: $APP_DOMAIN"
+          if [ -n "$APP_DOMAIN" ]; then
+            echo "Resolved APP_DOMAIN: $APP_DOMAIN"
+          fi
