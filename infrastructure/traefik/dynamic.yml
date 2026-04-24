@@ -1,5 +1,3 @@
-# Traefik dynamic configuration.
-
 tls:
   stores:
     default:
