@@ -53,6 +53,9 @@ jobs:
           esac
 
       - name: Send Telegram message
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           curl -sSL https://raw.githubusercontent.com/shipyard-io/templates/main/scripts/notify.sh | bash -s -- \
             "${{ inputs.app-name }}" \
