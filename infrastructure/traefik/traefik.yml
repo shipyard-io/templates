@@ -1,0 +1,52 @@
+# Traefik static configuration.
+
+api:
+  dashboard: true
+  insecure: false
+
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+
+  websecure:
+    address: ":443"
+    http:
+      tls: {}
+      middlewares:
+        - secure-headers@file
+        - compress@file
+
+  ping:
+    address: ":8080"
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: proxy
+
+  file:
+    filename: /dynamic.yml
+    watch: true
+
+tls:
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /certs/origin.pem
+        keyFile: /certs/origin.key
+
+ping:
+  entryPoint: ping
+
+log:
+  level: INFO
+
+accessLog:
+  bufferingSize: 100

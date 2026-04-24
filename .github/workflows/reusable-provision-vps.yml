@@ -1,0 +1,153 @@
+name: Provision VPS
+
+on:
+  workflow_dispatch:
+    inputs:
+      server-user:
+        description: SSH user on the VPS
+        required: false
+        default: ubuntu
+        type: string
+      deploy-user:
+        description: DEPLOY_USER for setup-vps.sh
+        required: false
+        default: ubuntu
+        type: string
+      remote-dir:
+        description: Temporary bootstrap directory on VPS
+        required: false
+        default: /tmp/shipyard-bootstrap
+        type: string
+      swap-size:
+        description: SWAP_SIZE for setup-vps.sh
+        required: false
+        default: 2G
+        type: string
+      apps-dir:
+        description: APPS_DIR for setup-vps.sh
+        required: false
+        default: /apps
+        type: string
+      ssh-port:
+        description: SSH_PORT for setup-vps.sh
+        required: false
+        default: "22"
+        type: string
+  workflow_call:
+    inputs:
+      server-user:
+        required: false
+        default: ubuntu
+        type: string
+      deploy-user:
+        required: false
+        default: ubuntu
+        type: string
+      remote-dir:
+        required: false
+        default: /tmp/shipyard-bootstrap
+        type: string
+      swap-size:
+        required: false
+        default: 2G
+        type: string
+      apps-dir:
+        required: false
+        default: /apps
+        type: string
+      ssh-port:
+        required: false
+        default: "22"
+        type: string
+    secrets:
+      SERVER_USER:
+        required: false
+      SSH_PRIVATE_KEY:
+        required: true
+      SERVER_IP:
+        required: true
+      CLOUDFLARE_ORIGIN_CERT:
+        required: true
+      CLOUDFLARE_ORIGIN_KEY:
+        required: true
+      DOMAIN:
+        required: true
+      TRAEFIK_DASHBOARD_AUTH:
+        required: true
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      SERVER_USER: ${{ inputs.server-user || secrets.SERVER_USER || 'ubuntu' }}
+      DEPLOY_USER: ${{ inputs.deploy-user || 'ubuntu' }}
+      REMOTE_DIR: ${{ inputs.remote-dir || '/tmp/shipyard-bootstrap' }}
+      SWAP_SIZE: ${{ inputs.swap-size || '2G' }}
+      APPS_DIR: ${{ inputs.apps-dir || '/apps' }}
+      SSH_PORT: ${{ inputs.ssh-port || '22' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate required secrets
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SERVER_IP: ${{ secrets.SERVER_IP }}
+          CLOUDFLARE_ORIGIN_CERT: ${{ secrets.CLOUDFLARE_ORIGIN_CERT }}
+          CLOUDFLARE_ORIGIN_KEY: ${{ secrets.CLOUDFLARE_ORIGIN_KEY }}
+          DOMAIN: ${{ secrets.DOMAIN }}
+          TRAEFIK_DASHBOARD_AUTH: ${{ secrets.TRAEFIK_DASHBOARD_AUTH }}
+        run: |
+          set -euo pipefail
+          for key in SSH_PRIVATE_KEY SERVER_IP CLOUDFLARE_ORIGIN_CERT CLOUDFLARE_ORIGIN_KEY DOMAIN TRAEFIK_DASHBOARD_AUTH; do
+            if [ -z "${!key:-}" ]; then
+              echo "Missing required secret: $key"
+              exit 1
+            fi
+          done
+
+      - name: Setup SSH
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "${{ secrets.SERVER_IP }}" >> ~/.ssh/known_hosts
+
+      - name: Upload bootstrap files
+        run: |
+          set -euo pipefail
+          ssh "${SERVER_USER}@${{ secrets.SERVER_IP }}" "rm -rf '${REMOTE_DIR}' && mkdir -p '${REMOTE_DIR}'"
+          tar czf - scripts infrastructure/traefik | \
+            ssh "${SERVER_USER}@${{ secrets.SERVER_IP }}" "tar xzf - -C '${REMOTE_DIR}'"
+
+      - name: Write Traefik secrets as files
+        env:
+          CLOUDFLARE_ORIGIN_CERT: ${{ secrets.CLOUDFLARE_ORIGIN_CERT }}
+          CLOUDFLARE_ORIGIN_KEY: ${{ secrets.CLOUDFLARE_ORIGIN_KEY }}
+          DOMAIN: ${{ secrets.DOMAIN }}
+          TRAEFIK_DASHBOARD_AUTH: ${{ secrets.TRAEFIK_DASHBOARD_AUTH }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/shipyard-certs
+          printf '%s\n' "$CLOUDFLARE_ORIGIN_CERT" > /tmp/shipyard-certs/origin.pem
+          printf '%s\n' "$CLOUDFLARE_ORIGIN_KEY" > /tmp/shipyard-certs/origin.key
+          printf 'DOMAIN=%s\nTRAEFIK_DASHBOARD_AUTH=%s\n' "$DOMAIN" "$TRAEFIK_DASHBOARD_AUTH" > /tmp/shipyard-certs/.env
+
+          ssh "${SERVER_USER}@${{ secrets.SERVER_IP }}" "mkdir -p '${REMOTE_DIR}/infrastructure/traefik/certs'"
+          scp /tmp/shipyard-certs/origin.pem "${SERVER_USER}@${{ secrets.SERVER_IP }}:${REMOTE_DIR}/infrastructure/traefik/certs/origin.pem"
+          scp /tmp/shipyard-certs/origin.key "${SERVER_USER}@${{ secrets.SERVER_IP }}:${REMOTE_DIR}/infrastructure/traefik/certs/origin.key"
+          scp /tmp/shipyard-certs/.env "${SERVER_USER}@${{ secrets.SERVER_IP }}:${REMOTE_DIR}/infrastructure/traefik/.env"
+          ssh "${SERVER_USER}@${{ secrets.SERVER_IP }}" "chmod 600 '${REMOTE_DIR}/infrastructure/traefik/certs/origin.key' && chmod 644 '${REMOTE_DIR}/infrastructure/traefik/certs/origin.pem'"
+
+      - name: Run setup-vps.sh
+        run: |
+          set -euo pipefail
+          ssh "${SERVER_USER}@${{ secrets.SERVER_IP }}" "cd '${REMOTE_DIR}' && sudo DEPLOY_USER='${DEPLOY_USER}' SWAP_SIZE='${SWAP_SIZE}' APPS_DIR='${APPS_DIR}' SSH_PORT='${SSH_PORT}' bash scripts/setup-vps.sh"
+
+      - name: Run setup-traefik.sh
+        run: |
+          set -euo pipefail
+          ssh "${SERVER_USER}@${{ secrets.SERVER_IP }}" "cd '${REMOTE_DIR}' && sudo bash scripts/setup-traefik.sh"

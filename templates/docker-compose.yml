@@ -30,24 +30,15 @@ services:
       - "traefik.enable=true"
       - "traefik.docker.network=proxy"
 
-      # HTTP → HTTPS
-      - "traefik.http.routers.${APP_NAME}-http.rule=Host(`${APP_DOMAIN}`)"
-      - "traefik.http.routers.${APP_NAME}-http.entrypoints=web"
-      - "traefik.http.routers.${APP_NAME}-http.middlewares=redirect-https"
-
-      # middleware
-      - "traefik.http.middlewares.redirect-https.redirectscheme.scheme=https"
-
-      # HTTPS
+      # Traffic Routing (HTTPS)
       - "traefik.http.routers.${APP_NAME}.rule=Host(`${APP_DOMAIN}`)"
       - "traefik.http.routers.${APP_NAME}.entrypoints=websecure"
       - "traefik.http.routers.${APP_NAME}.tls=true"
-      - "traefik.http.routers.${APP_NAME}.tls.certresolver=letsencrypt"
 
-      # service
+      # Internal Application Port
       - "traefik.http.services.${APP_NAME}.loadbalancer.server.port=${APP_PORT}"
 
-      # Shipyard
+      # Shipyard metadata
       - "shipyard.managed=true"
       - "shipyard.project=${APP_NAME}"
       - "shipyard.domain=${APP_DOMAIN}"

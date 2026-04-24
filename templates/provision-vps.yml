@@ -1,0 +1,48 @@
+---
+name: Provision VPS
+
+on:
+  workflow_dispatch:
+    inputs:
+      server-user:
+        description: SSH user on the VPS
+        required: false
+        default: ubuntu
+        type: string
+      deploy-user:
+        description: DEPLOY_USER for setup-vps.sh
+        required: false
+        default: ubuntu
+        type: string
+      remote-dir:
+        description: Temporary bootstrap directory on VPS
+        required: false
+        default: /tmp/shipyard-bootstrap
+        type: string
+      swap-size:
+        description: SWAP_SIZE for setup-vps.sh
+        required: false
+        default: 2G
+        type: string
+      apps-dir:
+        description: APPS_DIR for setup-vps.sh
+        required: false
+        default: /apps
+        type: string
+      ssh-port:
+        description: SSH_PORT for setup-vps.sh
+        required: false
+        default: "22"
+        type: string
+
+jobs:
+  provision:
+    uses: shipyard-io/shipyard/.github/workflows/provision-vps.yml@main
+    with:
+      server-user: ${{ inputs.server-user }}
+      deploy-user: ${{ inputs.deploy-user }}
+      remote-dir: ${{ inputs.remote-dir }}
+      swap-size: ${{ inputs.swap-size }}
+      apps-dir: ${{ inputs.apps-dir }}
+      ssh-port: ${{ inputs.ssh-port }}
+    secrets: inherit
