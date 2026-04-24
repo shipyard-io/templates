@@ -12,6 +12,16 @@ on:
         required: false
         default: /tmp/shipyard-bootstrap
         type: string
+      traefik-http-port:
+        description: HTTP port for Traefik
+        required: false
+        default: '80'
+        type: string
+      traefik-https-port:
+        description: HTTPS port for Traefik
+        required: false
+        default: '443'
+        type: string
   workflow_call:
     inputs:
       server-user:
@@ -20,6 +30,14 @@ on:
       remote-dir:
         required: false
         default: /tmp/shipyard-bootstrap
+        type: string
+      traefik-http-port:
+        required: false
+        default: '80'
+        type: string
+      traefik-https-port:
+        required: false
+        default: '443'
         type: string
     secrets:
       SERVER_USER:
@@ -45,6 +63,8 @@ jobs:
     env:
       SERVER_USER: ${{ inputs.server-user || secrets.SERVER_USER || 'ubuntu' }}
       REMOTE_DIR: ${{ inputs.remote-dir || '/tmp/shipyard-bootstrap' }}
+      TRAEFIK_HTTP_PORT: ${{ inputs.traefik-http-port || '80' }}
+      TRAEFIK_HTTPS_PORT: ${{ inputs.traefik-https-port || '443' }}
     steps:
       - name: Checkout templates repository
         uses: actions/checkout@v4
@@ -101,7 +121,9 @@ jobs:
           mkdir -p /tmp/shipyard-certs
           printf '%s\n' "$CLOUDFLARE_ORIGIN_CERT" > /tmp/shipyard-certs/origin.pem
           printf '%s\n' "$CLOUDFLARE_ORIGIN_KEY" > /tmp/shipyard-certs/origin.key
-          printf 'DOMAIN=%s\nTRAEFIK_DASHBOARD_AUTH=%s\n' "$DOMAIN" "$TRAEFIK_DASHBOARD_AUTH" > /tmp/shipyard-certs/.env
+          ESCAPED_AUTH=$(echo -n "$TRAEFIK_DASHBOARD_AUTH" | sed 's/\$/\$\$/g')
+          printf 'DOMAIN=%s\nTRAEFIK_DASHBOARD_AUTH=%s\nTRAEFIK_HTTP_PORT=%s\nTRAEFIK_HTTPS_PORT=%s\n' \
+            "$DOMAIN" "$ESCAPED_AUTH" "$TRAEFIK_HTTP_PORT" "$TRAEFIK_HTTPS_PORT" > /tmp/shipyard-certs/.env
 
           ssh "${SERVER_USER}@${{ secrets.SERVER_IP }}" "mkdir -p '${REMOTE_DIR}/infrastructure/traefik/certs'"
           scp /tmp/shipyard-certs/origin.pem "${SERVER_USER}@${{ secrets.SERVER_IP }}:${REMOTE_DIR}/infrastructure/traefik/certs/origin.pem"
