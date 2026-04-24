@@ -119,8 +119,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/shipyard-certs
-          printf '%s\n' "$CLOUDFLARE_ORIGIN_CERT" > /tmp/shipyard-certs/origin.pem
-          printf '%s\n' "$CLOUDFLARE_ORIGIN_KEY" > /tmp/shipyard-certs/origin.key
+          printf '%b\n' "$CLOUDFLARE_ORIGIN_CERT" > /tmp/shipyard-certs/origin.pem
+          printf '%b\n' "$CLOUDFLARE_ORIGIN_KEY" > /tmp/shipyard-certs/origin.key
           ESCAPED_AUTH=$(echo -n "$TRAEFIK_DASHBOARD_AUTH" | sed -e 's/\\//g' -e 's/\$/\$\$/g')
           printf "DOMAIN='%s'\nTRAEFIK_DASHBOARD_AUTH='%s'\nTRAEFIK_HTTP_PORT='%s'\nTRAEFIK_HTTPS_PORT='%s'\n" \
             "$DOMAIN" "$ESCAPED_AUTH" "$TRAEFIK_HTTP_PORT" "$TRAEFIK_HTTPS_PORT" > /tmp/shipyard-certs/.env
