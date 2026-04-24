@@ -1,0 +1,51 @@
+version: "2.1"
+
+jobs:
+  rollback:
+    description: "Rollback via SSH"
+    docker:
+      - image: cimg/base:current
+    parameters:
+      app-name:
+        type: string
+        description: "Application name"
+      image-tag:
+        type: string
+        description: "Image tag to rollback to"
+    steps:
+      - checkout
+      - run:
+          name: Setup SSH key
+          command: |
+            mkdir -p ~/.ssh
+            echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+            chmod 600 ~/.ssh/id_rsa
+            ssh-keyscan -H "$SERVER_IP" >> ~/.ssh/known_hosts
+            cat >> ~/.ssh/config \<<EOF
+            Host *
+              ServerAliveInterval 60
+              ServerAliveCountMax 10
+            EOF
+      - run:
+          name: Execute Rollback
+          command: |
+            SERVER_USER="${SERVER_USER:-ubuntu}"
+            echo "Rolling back << parameters.app-name >> to tag: << parameters.image-tag >>"
+            ssh ${SERVER_USER}@${SERVER_IP} bash \<<EOF
+              set -e
+              cd /apps/<< parameters.app-name >>
+
+              echo "<< parameters.image-tag >>" > .current-tag
+              # Substitute the IMAGE_TAG line in .env (if necessary, or handle via bash string substitution)
+              sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=<< parameters.image-tag >>/g" .env
+
+              if [ ! -f docker-compose.yml ]; then
+                echo "docker-compose.yml not found"
+                exit 1
+              fi
+
+              docker compose pull
+              docker compose up -d --remove-orphans
+
+              echo "Rollback completed. Current tag: << parameters.image-tag >>"
+            EOF

@@ -1,0 +1,44 @@
+version: "2.1"
+
+jobs:
+  build-docker:
+    description: "Build & Push Docker Image to GHCR"
+    docker:
+      - image: cimg/base:current
+    parameters:
+      app-name:
+        type: string
+        description: "Application name used in the GHCR image name"
+      dockerfile:
+        type: string
+        default: "Dockerfile"
+        description: "Path to the Dockerfile"
+      context:
+        type: string
+        default: "."
+        description: "Docker build context"
+    steps:
+      - checkout
+      - setup_remote_docker:
+          version: "24.0"
+      - run:
+          name: Login to GHCR
+          command: |
+            echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$CIRCLE_PROJECT_USERNAME" --password-stdin
+      - run:
+          name: Extract image metadata and Build
+          command: |
+            IMAGE_NAME="ghcr.io/$CIRCLE_PROJECT_USERNAME/<< parameters.app-name >>"
+            IMAGE_TAG="$CIRCLE_SHA1"
+            
+            if [ "$CIRCLE_BRANCH" = "main" ]; then
+              TAGS="-t $IMAGE_NAME:$IMAGE_TAG -t $IMAGE_NAME:latest"
+            else
+              TAGS="-t $IMAGE_NAME:$IMAGE_TAG"
+            fi
+            
+            docker build -f << parameters.dockerfile >> $TAGS << parameters.context >>
+            docker push $IMAGE_NAME:$IMAGE_TAG
+            if [ "$CIRCLE_BRANCH" = "main" ]; then
+              docker push $IMAGE_NAME:latest
+            fi

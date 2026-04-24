@@ -1,0 +1,40 @@
+version: "2.1"
+
+jobs:
+  notify:
+    description: "Send Telegram Notification"
+    docker:
+      - image: cimg/base:current
+    parameters:
+      app-name:
+        type: string
+        description: "Application name"
+      status:
+        type: string
+        description: "Deployment status (success, failure, etc.)"
+      commit-message:
+        type: string
+        default: ""
+      actor:
+        type: string
+        default: ""
+    steps:
+      - run:
+          name: Telegram notify
+          command: |
+            # Map CircleCI status or passed-in status to emojis
+            if [ "<< parameters.status >>" = "success" ]; then
+              EMOJI="✅"
+            else
+              EMOJI="❌"
+            fi
+            
+            MESSAGE="$EMOJI **<< parameters.app-name >>** deployment: << parameters.status >>
+            Commit: << parameters.commit-message >>
+            Actor: << parameters.actor >>
+            SHA: ${CIRCLE_SHA1:0:7}"
+            
+            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              -d chat_id="${TELEGRAM_CHAT_ID}" \
+              -d text="$MESSAGE" \
+              -d parse_mode="Markdown"

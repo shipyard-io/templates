@@ -1,0 +1,109 @@
+version: "2.1"
+
+jobs:
+  deploy-ssh:
+    description: "Deploy via SSH"
+    docker:
+      - image: cimg/base:current
+    parameters:
+      app-name:
+        type: string
+        description: "Application name used for /apps/<app-name> on the target server"
+      image-tag:
+        type: string
+        description: "Image tag to deploy (git SHA)"
+      compose-file:
+        type: string
+        default: "docker-compose.yml"
+      health-check-path:
+        type: string
+        default: "/health"
+      health-check-retries:
+        type: integer
+        default: 5
+    steps:
+      - checkout
+      - run:
+          name: Setup SSH key
+          command: |
+            mkdir -p ~/.ssh
+            echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+            chmod 600 ~/.ssh/id_rsa
+            ssh-keyscan -H "$SERVER_IP" >> ~/.ssh/known_hosts
+            cat >> ~/.ssh/config \<<EOF
+            Host *
+              ServerAliveInterval 60
+              ServerAliveCountMax 10
+            EOF
+      - run:
+          name: Upload Docker Compose file
+          command: |
+            if [ ! -f "<< parameters.compose-file >>" ]; then
+              echo "Compose file not found: << parameters.compose-file >>"
+              exit 1
+            fi
+            SERVER_USER="${SERVER_USER:-ubuntu}"
+            ssh ${SERVER_USER}@${SERVER_IP} "mkdir -p /apps/<< parameters.app-name >>"
+            scp "<< parameters.compose-file >>" "${SERVER_USER}@${SERVER_IP}:/apps/<< parameters.app-name >>/docker-compose.yml"
+      - run:
+          name: Save current image tag for rollback
+          command: |
+            SERVER_USER="${SERVER_USER:-ubuntu}"
+            CURRENT_TAG=$(ssh ${SERVER_USER}@${SERVER_IP} "cat /apps/<< parameters.app-name >>/.current-tag 2>/dev/null || echo 'latest'")
+            echo "export CURRENT_TAG=${CURRENT_TAG}" >> $BASH_ENV
+            echo "Current tag: ${CURRENT_TAG}"
+      - run:
+          name: Deploy new image
+          command: |
+            SERVER_USER="${SERVER_USER:-ubuntu}"
+            ssh ${SERVER_USER}@${SERVER_IP} bash \<<EOF
+            set -e
+            APP_DIR="/apps/<< parameters.app-name >>"
+            mkdir -p "\$APP_DIR"
+            cd "\$APP_DIR"
+
+            # Write .env from secret content
+            printf '%s\n' "\$ENV_FILE_CONTENT" > .env
+
+            echo "IMAGE_TAG=<< parameters.image-tag >>" >> .env
+            echo "APP_NAME=<< parameters.app-name >>" >> .env
+
+            echo "\$CURRENT_TAG" > .previous-tag
+            echo "<< parameters.image-tag >>" > .current-tag
+
+            echo "\$GITHUB_TOKEN" | docker login ghcr.io -u "\$CIRCLE_PROJECT_USERNAME" --password-stdin 2>/dev/null
+
+            if [ ! -f docker-compose.yml ]; then
+              echo "docker-compose.yml not found in \$APP_DIR"
+              exit 1
+            fi
+
+            docker compose pull
+            docker compose up -d --remove-orphans
+            EOF
+      - run:
+          name: Health check
+          command: |
+            SERVER_USER="${SERVER_USER:-ubuntu}"
+            APP_PORT=\$(ssh \${SERVER_USER}@\${SERVER_IP} "grep '^APP_PORT=' /apps/<< parameters.app-name >>/.env | tail -1 | cut -d= -f2")
+            
+            echo "Running health check on port=\${APP_PORT}, path=<< parameters.health-check-path >>."
+            
+            PASSED=false
+            for i in \$(seq 1 << parameters.health-check-retries >>); do
+              STATUS=\$(ssh \${SERVER_USER}@\${SERVER_IP} "curl -s -o /dev/null -w '%{http_code}' http://localhost:\${APP_PORT}<< parameters.health-check-path >> || echo '000'")
+              if [ "\$STATUS" = "200" ]; then
+                echo "Health check passed."
+                PASSED=true
+                break
+              fi
+              echo "Health check returned HTTP \$STATUS. Retrying in 10 seconds."
+              sleep 10
+            done
+            
+            if [ "\$PASSED" = "false" ]; then
+              echo "Health check failed."
+              # CircleCI does not have failure() conditional on steps easily without logic. 
+              # Triggering exit 1 will fail the job.
+              exit 1
+            fi
