@@ -30,22 +30,4 @@ jobs:
           name: Execute Rollback
           command: |
             SERVER_USER="${SERVER_USER:-ubuntu}"
-            echo "Rolling back << parameters.app-name >> to tag: << parameters.image-tag >>"
-            ssh ${SERVER_USER}@${SERVER_IP} bash \<<EOF
-              set -e
-              cd /apps/<< parameters.app-name >>
-
-              echo "<< parameters.image-tag >>" > .current-tag
-              # Substitute the IMAGE_TAG line in .env (if necessary, or handle via bash string substitution)
-              sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=<< parameters.image-tag >>/g" .env
-
-              if [ ! -f docker-compose.yml ]; then
-                echo "docker-compose.yml not found"
-                exit 1
-              fi
-
-              docker compose pull
-              docker compose up -d --remove-orphans
-
-              echo "Rollback completed. Current tag: << parameters.image-tag >>"
-            EOF
+            ssh ${SERVER_USER}@${SERVER_IP} "bash ~/shipyard/scripts/rollback.sh '<< parameters.app-name >>' '<< parameters.image-tag >>'"
