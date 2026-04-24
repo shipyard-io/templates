@@ -52,6 +52,7 @@ jobs:
             # Write .env file
             ssh ${SERVER_USER}@${SERVER_IP} "cat > /apps/<< parameters.app-name >>/.env" \<<EOF
             $ENV_FILE_CONTENT
+
             GITHUB_REPOSITORY=$(echo "${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}" | tr '[:upper:]' '[:lower:]')
             EOF
             

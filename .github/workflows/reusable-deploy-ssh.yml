@@ -90,6 +90,7 @@ jobs:
           # Write .env file
           ssh ${SERVER_USER}@${{ secrets.SERVER_IP }} "cat > /apps/${{ inputs.app-name }}/.env" <<EOF
           ${{ secrets.ENV_FILE_CONTENT }}
+
           GITHUB_REPOSITORY=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           EOF
 
