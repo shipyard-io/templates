@@ -76,6 +76,11 @@ jobs:
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H "${{ secrets.SERVER_IP }}" >> ~/.ssh/known_hosts
+          cat >> ~/.ssh/config <<EOF
+          Host *
+            ServerAliveInterval 60
+            ServerAliveCountMax 10
+          EOF
 
       - name: Upload Traefik files
         run: |
