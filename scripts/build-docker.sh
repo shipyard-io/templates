@@ -3,8 +3,8 @@ set -e
 
 # Usage: bash scripts/build-docker.sh <registry_url> <app_name> <image_tag> <dockerfile> <context> <is_main_branch>
 
-REGISTRY_URL=$1
-APP_NAME=$2
+REGISTRY_URL=$(echo "$1" | tr '[:upper:]' '[:lower:]')
+APP_NAME=$(echo "$2" | tr '[:upper:]' '[:lower:]')
 IMAGE_TAG=$3
 DOCKERFILE=${4:-Dockerfile}
 CONTEXT=${5:-.}
