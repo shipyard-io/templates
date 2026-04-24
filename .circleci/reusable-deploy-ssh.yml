@@ -56,4 +56,4 @@ jobs:
             
             # Call the centralized deploy script on the VPS
             ssh ${SERVER_USER}@${SERVER_IP} \
-              "bash ~/shipyard/scripts/deploy.sh '<< parameters.app-name >>' '<< parameters.image-tag >>' '<< parameters.health-check-path >>' '<< parameters.health-check-retries >>'"
+              "curl -sSL https://raw.githubusercontent.com/shipyard-io/templates/main/scripts/deploy.sh | bash -s -- '<< parameters.app-name >>' '<< parameters.image-tag >>' '<< parameters.health-check-path >>' '<< parameters.health-check-retries >>'"

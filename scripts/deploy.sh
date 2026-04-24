@@ -59,7 +59,7 @@ else
 
   if [ "$PASSED" = "false" ]; then
     echo "Health check failed after $HEALTH_CHECK_RETRIES attempts. Rolling back..."
-    bash ~/shipyard/scripts/rollback.sh "$APP_NAME"
+    curl -sSL https://raw.githubusercontent.com/shipyard-io/templates/main/scripts/rollback.sh | bash -s -- "$APP_NAME"
     exit 1
   fi
 fi
