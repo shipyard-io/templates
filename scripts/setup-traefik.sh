@@ -52,10 +52,10 @@ fi
 [ -f docker-compose.yml ] || error "docker-compose.yml not found."
 
 if docker compose ps --services --filter status=running 2>/dev/null | grep -qx "traefik"; then
-  docker compose down >/dev/null 2>&1
+  docker compose down
 fi
 
-docker compose up -d >/dev/null 2>&1
+docker compose up -d
 log "Traefik started."
 
 section "Verify"
