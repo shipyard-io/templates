@@ -84,8 +84,11 @@ jobs:
       APPS_DIR: ${{ inputs.apps-dir || '/apps' }}
       SSH_PORT: ${{ inputs.ssh-port || '22' }}
     steps:
-      - name: Checkout repository
+      - name: Checkout templates repository
         uses: actions/checkout@v4
+        with:
+          repository: shipyard-io/templates
+          path: shipyard-templates
 
       - name: Validate required secrets
         env:
@@ -116,7 +119,7 @@ jobs:
         run: |
           set -euo pipefail
           ssh "${SERVER_USER}@${{ secrets.SERVER_IP }}" "rm -rf '${REMOTE_DIR}' && mkdir -p '${REMOTE_DIR}'"
-          tar czf - scripts infrastructure/traefik | \
+          tar czf - -C shipyard-templates scripts infrastructure/traefik | \
             ssh "${SERVER_USER}@${{ secrets.SERVER_IP }}" "tar xzf - -C '${REMOTE_DIR}'"
 
       - name: Write Traefik secrets as files

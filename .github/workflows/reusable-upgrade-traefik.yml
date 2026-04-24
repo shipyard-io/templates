@@ -46,8 +46,11 @@ jobs:
       SERVER_USER: ${{ inputs.server-user || secrets.SERVER_USER || 'ubuntu' }}
       REMOTE_DIR: ${{ inputs.remote-dir || '/tmp/shipyard-bootstrap' }}
     steps:
-      - name: Checkout repository
+      - name: Checkout templates repository
         uses: actions/checkout@v4
+        with:
+          repository: shipyard-io/templates
+          path: shipyard-templates
 
       - name: Validate required secrets
         env:
@@ -78,7 +81,7 @@ jobs:
         run: |
           set -euo pipefail
           ssh "${SERVER_USER}@${{ secrets.SERVER_IP }}" "rm -rf '${REMOTE_DIR}' && mkdir -p '${REMOTE_DIR}'"
-          tar czf - scripts/setup-traefik.sh infrastructure/traefik | \
+          tar czf - -C shipyard-templates scripts/setup-traefik.sh infrastructure/traefik | \
             ssh "${SERVER_USER}@${{ secrets.SERVER_IP }}" "tar xzf - -C '${REMOTE_DIR}'"
 
       - name: Sync Traefik secrets
