@@ -21,6 +21,11 @@ on:
         required: false
         type: string
         default: "unknown"
+      app-domain:
+        description: "Application domain"
+        required: false
+        type: string
+        default: ""
 
     secrets:
       TELEGRAM_BOT_TOKEN:
@@ -65,4 +70,5 @@ jobs:
             "${{ github.sha }}" \
             "${{ github.ref_name }}" \
             "${{ github.repository }}" \
-            "${{ github.run_id }}"
+            "${{ github.run_id }}" \
+            "${{ inputs.app-domain }}"

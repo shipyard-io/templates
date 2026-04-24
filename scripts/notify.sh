@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# Usage: bash scripts/notify.sh <app-name> <status> <commit-message> <actor> <sha> <ref_name> <repository> <run_id>
+# Usage: bash scripts/notify.sh <app-name> <status> <commit-message> <actor> <sha> <ref_name> <repository> <run_id> <app-domain>
 
 APP_NAME=$1
 STATUS=$2
@@ -11,6 +11,7 @@ SHA=$5
 REF_NAME=$6
 REPOSITORY=$7
 RUN_ID=$8
+APP_DOMAIN=$9
 
 case "$STATUS" in
   success)
@@ -47,6 +48,8 @@ ${ICON} *${APP_NAME}*
 \`${SHORT_COMMIT}\`
 
 🔖 *SHA:* \`${SHORT_SHA}\`
+
+$( [ -n "$APP_DOMAIN" ] && echo "🔗 *Domain:* [${APP_DOMAIN}](https://${APP_DOMAIN})" )
 
 ━━━━━━━━━━━━━━━━━━━━━━━━
 🔎 [View Workflow Run](https://github.com/${REPOSITORY}/actions/runs/${RUN_ID})

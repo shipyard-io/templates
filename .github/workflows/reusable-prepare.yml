@@ -1,0 +1,47 @@
+name: Prepare Environment
+
+on:
+  workflow_call:
+    outputs:
+      app-name:
+        description: "Application name extracted from .env and lowercased"
+        value: ${{ jobs.prepare.outputs.app-name }}
+      app-domain:
+        description: "Application domain extracted from .env"
+        value: ${{ jobs.prepare.outputs.app-domain }}
+
+jobs:
+  prepare:
+    name: Resolve Variables
+    runs-on: ubuntu-latest
+    outputs:
+      app-name: ${{ steps.vars.outputs.app_name }}
+      app-domain: ${{ steps.vars.outputs.app_domain }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Resolve variables from .env
+        id: vars
+        shell: bash
+        run: |
+          if [ ! -f .env ]; then
+            echo "Error: .env file not found"
+            exit 1
+          fi
+          # Extract values, remove carriage returns, and trim whitespace
+          APP_NAME_RAW="$(grep -E '^APP_NAME=' .env | head -n1 | cut -d= -f2- | tr -d '\r' | xargs)"
+          APP_DOMAIN="$(grep -E '^APP_DOMAIN=' .env | head -n1 | cut -d= -f2- | tr -d '\r' | xargs)"
+
+          if [ -z "$APP_NAME_RAW" ]; then
+            echo "Error: APP_NAME is missing in .env"
+            exit 1
+          fi
+          
+          # Convert APP_NAME to lowercase for Docker compatibility
+          APP_NAME="$(echo "$APP_NAME_RAW" | tr '[:upper:]' '[:lower:]')"
+          
+          echo "app_name=$APP_NAME" >> "$GITHUB_OUTPUT"
+          echo "app_domain=$APP_DOMAIN" >> "$GITHUB_OUTPUT"
+          echo "Resolved APP_NAME: $APP_NAME"
+          echo "Resolved APP_DOMAIN: $APP_DOMAIN"
