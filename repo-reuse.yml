@@ -19,8 +19,11 @@ jobs:
     uses: shipyard-io/templates/.github/workflows/reusable-build-docker.yml@main
     with:
       app-name: ${{ needs.prepare.outputs['app-name'] }}
+      dockerfile: 'Backend/Dockerfile'
+      context: 'Backend'
     secrets:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 
   setup-vps:
     needs: [prepare]
@@ -55,13 +58,15 @@ jobs:
     with:
       app-name: ${{ needs.prepare.outputs['app-name'] }}
       image-tag: ${{ needs.build.outputs['image-tag'] }}
-      health-check-path: ${{ needs.prepare.outputs['health-check-path'] }}
+      health-check-path: '/'
+      compose-file: 'Devops/Backend/docker-compose.prod.yml'
     secrets:
       SERVER_IP: ${{ secrets.SERVER_IP }}
       SERVER_USER: ${{ secrets.SERVER_USER }}
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
       ENV_FILE_CONTENT: ${{ secrets.ENV_FILE_CONTENT }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 
   notify:
     needs: [prepare, build, deploy]

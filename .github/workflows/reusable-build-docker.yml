@@ -20,6 +20,7 @@ on:
 
     outputs:
       image-tag:
+
         description: "Built image tag (short git SHA)"
         value: ${{ jobs.build.outputs.image-tag }}
       image-name:
@@ -41,6 +42,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          curl -sSL https://raw.githubusercontent.com/shipyard-io/templates/main/scripts/free-disk-space.sh | bash
 
       # Authenticate to GitHub Container Registry
       - name: Login to GHCR
