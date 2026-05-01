@@ -1,17 +1,15 @@
----
 services:
   app:
-    image: ghcr.io/${GITHUB_REPOSITORY}:${IMAGE_TAG:-latest}
+    image: ${DOCKER_IMAGE}:${IMAGE_TAG:-latest}
     container_name: ${APP_NAME}
     env_file:
       - .env
+    ports:
+      - "${APP_PORT}:80"
     restart: unless-stopped
 
     healthcheck:
-      test:
-        - "CMD-SHELL"
-        - >-
-          curl -f http://localhost:${APP_PORT}/health || exit 1
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -30,15 +28,12 @@ services:
       - "traefik.enable=true"
       - "traefik.docker.network=proxy"
 
-      # Traffic Routing (HTTPS)
       - "traefik.http.routers.${APP_NAME}.rule=Host(`${APP_DOMAIN}`)"
       - "traefik.http.routers.${APP_NAME}.entrypoints=websecure"
       - "traefik.http.routers.${APP_NAME}.tls=true"
+      
+      - "traefik.http.services.${APP_NAME}.loadbalancer.server.port=80"
 
-      # Internal Application Port
-      - "traefik.http.services.${APP_NAME}.loadbalancer.server.port=${APP_PORT}"
-
-      # Shipyard metadata
       - "shipyard.managed=true"
       - "shipyard.project=${APP_NAME}"
       - "shipyard.domain=${APP_DOMAIN}"

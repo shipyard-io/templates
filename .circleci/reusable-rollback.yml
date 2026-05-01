@@ -30,4 +30,6 @@ jobs:
           name: Execute Rollback
           command: |
             SERVER_USER="${SERVER_USER:-ubuntu}"
-            ssh ${SERVER_USER}@${SERVER_IP} "bash ~/shipyard/scripts/rollback.sh '<< parameters.app-name >>' '<< parameters.image-tag >>'"
+            ssh ${SERVER_USER}@${SERVER_IP} \
+              "echo '${GITHUB_TOKEN}' | docker login ghcr.io -u '${CIRCLE_PROJECT_USERNAME}' --password-stdin 2>/dev/null; \
+               curl -sSL https://raw.githubusercontent.com/shipyard-io/templates/main/scripts/rollback.sh | bash -s -- '<< parameters.app-name >>' '<< parameters.image-tag >>'"
