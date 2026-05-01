@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 # Usage: bash scripts/deploy.sh <app-name> <image-tag> [health-check-path] [health-check-retries] [registry-url]
 
@@ -10,6 +10,33 @@ HEALTH_CHECK_RETRIES=${4:-5}
 REGISTRY_URL=$(echo "${5:-ghcr.io/shipyard-io}" | tr '[:upper:]' '[:lower:]')
 
 APP_DIR="/apps/$APP_NAME"
+
+if [ -z "$APP_NAME" ]; then
+  echo "Missing required argument: app-name"
+  exit 1
+fi
+
+if [ -z "$IMAGE_TAG" ]; then
+  echo "Missing required argument: image-tag"
+  exit 1
+fi
+
+case "$APP_NAME" in
+  *[!a-zA-Z0-9._-]*)
+    echo "Invalid app-name: $APP_NAME. Allowed chars: a-z A-Z 0-9 . _ -"
+    exit 1
+    ;;
+esac
+
+if ! [[ "$HEALTH_CHECK_RETRIES" =~ ^[0-9]+$ ]]; then
+  echo "Invalid health-check-retries: $HEALTH_CHECK_RETRIES. Must be a non-negative integer."
+  exit 1
+fi
+
+if [ -z "$HEALTH_CHECK_PATH" ]; then
+  echo "health-check-path cannot be empty"
+  exit 1
+fi
 
 if [ ! -d "$APP_DIR" ]; then
   echo "Directory $APP_DIR does not exist. Please ensure docker-compose.yml and .env are uploaded first."

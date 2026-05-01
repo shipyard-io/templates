@@ -47,6 +47,7 @@ jobs:
 
       - name: Setup SSH key
         run: |
+          set -euo pipefail
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
@@ -61,10 +62,18 @@ jobs:
         env:
           SERVER_USER: ${{ secrets.SERVER_USER || 'ubuntu' }}
         run: |
+          set -euo pipefail
           if [ ! -f "${{ inputs.compose-file }}" ]; then
             echo "Compose file not found in repository: ${{ inputs.compose-file }}"
             exit 1
           fi
+
+          case "${{ inputs.app-name }}" in
+            ''|*[!a-zA-Z0-9._-]*)
+              echo "Invalid app-name. Allowed chars: a-z A-Z 0-9 . _ -"
+              exit 1
+              ;;
+          esac
 
           ssh ${SERVER_USER}@${{ secrets.SERVER_IP }} \
             "mkdir -p /apps/${{ inputs.app-name }}"
@@ -77,6 +86,7 @@ jobs:
         env:
           SERVER_USER: ${{ secrets.SERVER_USER || 'ubuntu' }}
         run: |
+          set -euo pipefail
           CURRENT_TAG=$(ssh ${SERVER_USER}@${{ secrets.SERVER_IP }} \
             "cat /apps/${{ inputs.app-name }}/.current-tag 2>/dev/null || echo 'latest'")
           echo "tag=${CURRENT_TAG}" >> $GITHUB_OUTPUT
@@ -86,7 +96,26 @@ jobs:
       - name: Deploy new image
         env:
           SERVER_USER: ${{ secrets.SERVER_USER || 'ubuntu' }}
+          DEPLOY_SCRIPT_SHA: 1376460315569c321551424d4d28f41a7b6892c1
         run: |
+          set -euo pipefail
+          case "${{ inputs.app-name }}" in
+            ''|*[!a-zA-Z0-9._-]*)
+              echo "Invalid app-name. Allowed chars: a-z A-Z 0-9 . _ -"
+              exit 1
+              ;;
+          esac
+
+          if [ -z "${{ inputs.image-tag }}" ]; then
+            echo "image-tag is required"
+            exit 1
+          fi
+
+          if ! [[ "${{ inputs.health-check-retries }}" =~ ^[0-9]+$ ]]; then
+            echo "health-check-retries must be a non-negative integer"
+            exit 1
+          fi
+
           # Write .env file
           ssh ${SERVER_USER}@${{ secrets.SERVER_IP }} "cat > /apps/${{ inputs.app-name }}/.env" <<EOF
           ${{ secrets.ENV_FILE_CONTENT }}
@@ -94,8 +123,9 @@ jobs:
 
           # Call the centralized deploy script on the VPS
           ssh ${SERVER_USER}@${{ secrets.SERVER_IP }} \
-            "echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin 2>/dev/null; \
-             curl -sSL https://raw.githubusercontent.com/shipyard-io/templates/main/scripts/deploy.sh | bash -s -- \
+            "set -euo pipefail; \
+             echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin 2>/dev/null; \
+             curl -fsSL https://raw.githubusercontent.com/shipyard-io/templates/${DEPLOY_SCRIPT_SHA}/scripts/deploy.sh | bash -s -- \
                '${{ inputs.app-name }}' \
                '${{ inputs.image-tag }}' \
                '${{ inputs.health-check-path }}' \
@@ -105,6 +135,7 @@ jobs:
       - name: Print deploy summary
         if: success()
         run: |
+          set -euo pipefail
           echo "Deployment summary"
           echo "Application: ${{ inputs.app-name }}"
           echo "Image tag:   ${{ inputs.image-tag }}"
