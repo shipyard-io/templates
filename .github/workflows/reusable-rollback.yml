@@ -55,6 +55,7 @@ jobs:
     steps:
       - name: Setup SSH key
         run: |
+          set -euo pipefail
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
@@ -64,10 +65,20 @@ jobs:
         id: resolve
         env:
           SERVER_USER: ${{ secrets.SERVER_USER || 'ubuntu' }}
+          ROLLBACK_SCRIPT_SHA: 1376460315569c321551424d4d28f41a7b6892c1
         run: |
+          set -euo pipefail
+          case "${{ inputs.app-name }}" in
+            ''|*[!a-zA-Z0-9._-]*)
+              echo "Invalid app-name. Allowed chars: a-z A-Z 0-9 . _ -"
+              exit 1
+              ;;
+          esac
+
           ssh ${SERVER_USER}@${{ secrets.SERVER_IP }} \
-            "echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin 2>/dev/null; \
-             curl -sSL https://raw.githubusercontent.com/shipyard-io/templates/main/scripts/rollback.sh | bash -s -- '${{ inputs.app-name }}' '${{ inputs.image-tag }}'"
+            "set -euo pipefail; \
+             echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin 2>/dev/null; \
+             curl -fsSL https://raw.githubusercontent.com/shipyard-io/templates/${ROLLBACK_SCRIPT_SHA}/scripts/rollback.sh | bash -s -- '${{ inputs.app-name }}' '${{ inputs.image-tag }}'"
           # For notification, we use the fallback tag logic
           TARGET_TAG="${{ inputs.image-tag }}"
           if [ -z "$TARGET_TAG" ]; then
@@ -79,6 +90,7 @@ jobs:
       - name: Notify rollback result
         if: always()
         run: |
+          set -euo pipefail
           if [ "${{ job.status }}" = "success" ]; then
             LABEL="Rolled back successfully"
           else
