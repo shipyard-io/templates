@@ -28,8 +28,8 @@ case "$APP_NAME" in
     ;;
 esac
 
-if ! [[ "$HEALTH_CHECK_RETRIES" =~ ^[0-9]+$ ]]; then
-  echo "Invalid health-check-retries: $HEALTH_CHECK_RETRIES. Must be a non-negative integer."
+if ! [[ "$HEALTH_CHECK_RETRIES" =~ ^[1-9][0-9]*$ ]]; then
+  echo "Invalid health-check-retries: $HEALTH_CHECK_RETRIES. Must be a positive integer."
   exit 1
 fi
 
